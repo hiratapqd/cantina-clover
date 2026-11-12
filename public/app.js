@@ -79,12 +79,17 @@ $('sync-button').addEventListener('click',()=>sync?.run());
 $('offline-toggle').addEventListener('change',()=>guarded(async()=>{await db.setMeta('offlineSimulation',$('offline-toggle').checked);await sync.run();}));
 $('export-button').addEventListener('click',event=>{event.preventDefault();void guarded(async()=>{const blob=new Blob([JSON.stringify({simulation:true,exportedAt:new Date().toISOString(),orders:await db.all(),pending:await db.pending()},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`casinha-comandas-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});});
 async function boot() {
+  const adminLink=document.querySelector('.admin-link');
+  if(!['localhost','127.0.0.1','[::1]'].includes(location.hostname))adminLink.hidden=true;
+  // Runtime configuration stays outside the offline shell cache.
+  void fetch('/api/config',{signal:AbortSignal.timeout(10000)}).then(response=>response.ok?response.json():null).then(config=>{if(!config)return;adminLink.hidden=!config.adminUrl;if(config.adminUrl)adminLink.href=config.adminUrl;}).catch(()=>{});
   db=await openStorage();
   try { const response=await fetch('/catalog.json');if(!response.ok)throw Error();catalog=(await response.json()).items;await db.setMeta('catalog',catalog); } catch {catalog=await db.getMeta('catalog');if(!catalog)throw new Error('Abra a demonstração com conexão uma primeira vez para carregar o catálogo.');}
   if(await db.getMeta('largeType')){document.documentElement.classList.add('large-type');$('font-button').setAttribute('aria-pressed','true');}
   $('offline-toggle').checked=!!await db.getMeta('offlineSimulation');sync=createSync(db,syncStatus);
   const id=location.hash.match(/^#\/comanda\/([a-f\d-]{36})$/)?.[1];if(id)order=await db.get(id);
   go(order?'review':'home');void sync.run();
+  if(!window.isSecureContext){const note=document.createElement('p');note.className='support-footnote';note.textContent='Acesso HTTP pela rede: as comandas são salvas neste navegador. Para reabrir a interface sem conexão, use um endereço HTTPS, como o da demonstração no Render.';document.querySelector('.support').append(note);}
   window.addEventListener('online',()=>sync.run());window.addEventListener('offline',()=>sync.run());
   setInterval(()=>sync.run(),30000);
   if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>message('O modo offline de reabertura não pôde ser preparado. As comandas continuam salvas neste navegador.'));

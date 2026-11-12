@@ -1,6 +1,15 @@
 export const payments = { dinheiro: 'Dinheiro', debito: 'Cartão de débito', pix: 'Pix' };
 export const money = cents => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 export const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+// randomUUID requires HTTPS, but getRandomValues also works for a LAN HTTP demo.
+export function newId() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+}
 export function requireThat(condition, message) { if (!condition) throw new Error(message); }
 export function parseMoney(value) {
   const raw = String(value ?? '').trim().replace(',', '.');
@@ -29,7 +38,7 @@ export function addItem(order, item, amount, now = new Date().toISOString()) {
   const items = structuredClone(order.items);
   const existing = items.find(row => row.catalogId === item.id && row.unitPriceCents === price && row.condition === (item.condition || ''));
   if (existing) existing.quantity = quantity(existing.quantity + qty);
-  else items.push({ id: crypto.randomUUID(), catalogId: item.id, name: item.name, code: item.code || item.isbn || '', kind: item.kind, category: item.category || 'livros', condition: item.condition || '', quantity: qty, unitPriceCents: price, occurredAt: now });
+  else items.push({ id: newId(), catalogId: item.id, name: item.name, code: item.code || item.isbn || '', kind: item.kind, category: item.category || 'livros', condition: item.condition || '', quantity: qty, unitPriceCents: price, occurredAt: now });
   requireThat(items.length <= 500, 'Esta comanda já contém o limite de itens.');
   return { ...order, items, totalCents: total(items), updatedAt: now };
 }

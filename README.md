@@ -11,7 +11,38 @@ npm install
 npm start
 ```
 
-Abra **http://127.0.0.1:3001**. Para parar, pressione `Ctrl+C`. Não é necessário configurar MongoDB ou `.env`. `PORT` permite outra porta; o servidor recusa a porta 3000 para preservar a administração. O servidor escuta somente neste computador.
+Abra **http://127.0.0.1:3001**. Para parar, pressione `Ctrl+C`. Não é necessário configurar MongoDB ou `.env`. `PORT` permite outra porta; em desenvolvimento local o servidor recusa a porta 3000 para preservar a administração. O servidor escuta em `0.0.0.0` para permitir acesso pela rede local e no Render. Para restringir ao próprio computador, defina `HOST=127.0.0.1` no ambiente.
+
+### Acessar de outro computador na mesma rede
+
+No laptop `192.168.15.13`, reinicie o servidor após atualizar o código: `Ctrl+C` e `npm start`. No computador `192.168.15.8`, abra **http://192.168.15.13:3001**. A variável `HOST`, se definida, precisa ser `0.0.0.0`, e `PORT` deve ser `3001`. Não use `NODE_ENV=production` localmente sem definir a porta, pois em produção o padrão é 10000.
+
+Se ainda ocorrer timeout, verifique o Firewall do Windows no laptop. Uma regra pode liberar somente TCP 3001, somente na rede privada e somente para `192.168.15.8`. Não é necessário desativar o firewall nem configurar encaminhamento de portas no roteador. Redes Wi-Fi de convidados ou com isolamento entre clientes também podem impedir a conexão.
+
+O acesso por IP usando HTTP permite criar e salvar comandas, mas **a reabertura da interface offline exige HTTPS** (ou localhost no próprio laptop), por exigência do navegador para service workers. Para demonstrar esse recurso nos dois computadores, use a URL HTTPS do Render. Cada computador/navegador tem suas próprias comandas locais; esta demo ainda não consulta a lista de comandas de outros aparelhos.
+
+## Hospedar a demonstração no Render
+
+O `server.js` está preparado para um **Web Service Node.js**, com porta recebida por `PORT` e verificação em `/health`. O `render.yaml` permite criar o serviço via Blueprint, sem provisionar recursos pagos. A versão Node 24 é definida em `package.json`.
+
+Para criar manualmente no painel do Render:
+
+1. Envie este projeto para um repositório Git e conecte-o em **New → Web Service**.
+2. Se o projeto estiver em uma subpasta do repositório, indique essa subpasta em **Root Directory**. Se estiver na raiz, deixe vazio.
+3. Escolha o runtime **Node**, Build Command **`npm ci --omit=dev`** e Start Command **`npm start`**.
+4. Configure **`NODE_ENV=production`**, **`HOST=0.0.0.0`** e Health Check Path **`/health`**. Deixe o Render fornecer `PORT`.
+5. Opcionalmente, configure **`ADMIN_URL`** com o endereço público da administração. Sem essa variável, o link de administração fica oculto na hospedagem.
+6. Publique e abra a URL HTTPS fornecida pelo Render. A porta 3001 é usada apenas no desenvolvimento local.
+
+### Persistência no Render
+
+O sistema de arquivos padrão do Render é temporário e pode ser apagado em reinícios ou novos deploys. Por isso, sem `DEMO_DATA_DIR`, o servidor em produção **não confirma o recebimento das operações de sincronização**: responde 503 com uma explicação, e o navegador mantém as comandas e a fila pendente. Os fluxos do demonstrador continuam funcionando, inclusive offline após o carregamento inicial.
+
+Para habilitar a sincronização central desta demonstração, anexe um **disco persistente** a um serviço pago, defina o Mount Path como **`/var/data`** e configure **`DEMO_DATA_DIR=/var/data`**. O arquivo será `/var/data/demo-central.json`. A variável deve apontar para o disco realmente montado; apenas criar a variável não torna o diretório persistente. Use uma única instância para este receptor baseado em arquivo.
+
+Não há integração MongoDB nesta etapa. A futura integração substituirá o receptor de demonstração. O demonstrador continua sem autenticação e com pagamentos simulados; use dados de teste ao compartilhá-lo. Dados já salvos em `127.0.0.1:3001` não são transferidos automaticamente ao endereço do Render: cada origem tem seu armazenamento local.
+
+Referências: [Web Services](https://render.com/docs/web-services), [discos persistentes](https://render.com/docs/disks) e [Blueprints](https://render.com/docs/blueprint-spec).
 
 ## Experimentar o atendimento
 
@@ -70,7 +101,7 @@ npm test
 npm run test:browser
 ```
 
-`fake-indexeddb` é usado apenas nos testes. O teste de navegador usa Playwright com o Microsoft Edge instalado, cria dados isolados e verifica também a reabertura realmente offline. As capturas ficam em `.work/`. Não há autenticação nesta fase: o demonstrador local não deve ser exposto publicamente como sistema de produção.
+`fake-indexeddb` é usado apenas nos testes. O teste de navegador usa Playwright com o Microsoft Edge instalado, cria dados isolados e verifica também a reabertura realmente offline. As capturas ficam em `.work/`. Não há autenticação nesta fase: o demonstrador não deve ser usado publicamente como sistema de produção.
 
 ## Evolução para Clover
 

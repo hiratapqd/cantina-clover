@@ -6,7 +6,26 @@ import { randomUUID } from 'node:crypto';
 import { validateOrder } from './public/domain.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const dataFile = path.join(root, '.data', 'demo-central.json');
+export function getServerConfig(env = process.env) {
+  const hosted = env.RENDER === 'true' || env.NODE_ENV === 'production';
+  const port = Number(env.PORT || (hosted ? 10000 : 3001));
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT deve ser um número inteiro entre 1 e 65535.');
+  if (!hosted && port === 3000) throw new Error('A porta 3000 está reservada à administração local. Use 3001 ou outra porta.');
+  let adminUrl = hosted ? null : 'http://127.0.0.1:3000';
+  if (env.ADMIN_URL) {
+    const url = new URL(env.ADMIN_URL);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('ADMIN_URL deve ser uma URL HTTP ou HTTPS sem credenciais.');
+    adminUrl = url.href;
+  }
+  return {
+    port,
+    host: env.HOST || '0.0.0.0',
+    file: path.join(path.resolve(env.DEMO_DATA_DIR || path.join(root, '.data')), 'demo-central.json'),
+    // A temporary cloud filesystem must never acknowledge durable receipt.
+    syncEnabled: !hosted || Boolean(env.DEMO_DATA_DIR?.trim()),
+    adminUrl,
+  };
+}
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
 async function loadState(file) { try { return JSON.parse(await readFile(file, 'utf8')); } catch (error) { if (error.code === 'ENOENT') return { orders: {}, accepted: {} }; throw error; } }
 export async function applyEvents(state, events) {
@@ -25,7 +44,8 @@ export async function applyEvents(state, events) {
   }
   return next;
 }
-export function createServer({ file = dataFile } = {}) {
+export function createServer(options = {}) {
+  const { file, syncEnabled, adminUrl } = { ...getServerConfig(), ...options };
   let queue = Promise.resolve();
   return http.createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -36,7 +56,9 @@ export function createServer({ file = dataFile } = {}) {
     try {
       const url = new URL(req.url, 'http://localhost');
       if (url.pathname === '/health') return json(200, { status: 'ok', mode: 'demonstracao-operacao' });
+      if (url.pathname === '/api/config' && req.method === 'GET') return json(200, { adminUrl, syncEnabled });
       if (url.pathname === '/api/demo/sync' && req.method === 'POST') {
+        if (!syncEnabled) return json(503, { error: 'Sincronização de demonstração indisponível: configure um disco persistente no servidor. As comandas continuam salvas neste navegador e aguardando envio.' });
         if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return json(403, { error: 'Origem não permitida.' });
         if (!String(req.headers['content-type']).startsWith('application/json')) return json(415, { error: 'Use JSON.' });
         let body = '';
@@ -68,10 +90,12 @@ export function createServer({ file = dataFile } = {}) {
   });
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const port = Number(process.env.PORT || 3001);
-  if (port === 3000) throw new Error('A porta 3000 está reservada à administração. Use 3001 ou outra porta.');
+  const { port, host, syncEnabled } = getServerConfig();
   const server = createServer();
-  server.listen(port, '127.0.0.1', () => console.log(`Operação Casinha Azul: http://127.0.0.1:${port}\nDemonstração: pagamentos simulados. Administração permanece na porta 3000.`));
+  server.listen(port, host, () => {
+    console.log(`Operação Casinha Azul: http://${host}:${port}\nDemonstração: pagamentos simulados.`);
+    if (!syncEnabled) console.log('Sem disco persistente configurado: a sincronização central está indisponível. As operações permanecem na fila local do navegador.');
+  });
   server.on('error', error => { console.error(`Não foi possível abrir a porta ${port}: ${error.code}.`); process.exitCode = 1; });
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { server.close(); server.closeIdleConnections(); });
 }

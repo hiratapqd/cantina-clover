@@ -1,0 +1,18 @@
+# Demo web service. No paid resources are provisioned by this blueprint.
+services:
+  - type: web
+    name: casinha-azul-operacao
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+# PORT is supplied by Render. Node 24 is selected by package.json engines.
+# Optional ADMIN_URL: public URL of the administration website.
+# For central demo sync, use a paid service with a persistent disk,
+# and set DEMO_DATA_DIR to that disk's mount path (see README).

@@ -10,7 +10,7 @@ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const origin=`http://127.0.0.1:${server.address().port}`;
 let browser;
 try {
-  browser=await chromium.launch({channel:'msedge',headless:true});
+  browser=await chromium.launch({channel:'msedge',headless:true,args:['--host-resolver-rules=MAP casinha-demo.test 127.0.0.1','--no-proxy-server']});
   const context=await browser.newContext({viewport:{width:1440,height:1080}});
   const page=await context.newPage();const errors=[];
   page.on('pageerror',error=>errors.push(error.message));
@@ -84,6 +84,20 @@ try {
   assert.match(await page.locator('#order-total').innerText(),/12,00/);
   assert.match(await page.locator('#order-header').innerText(),/Aberta/);
   assert.deepEqual(errors,[]);
+  const lanContext=await browser.newContext();
+  const lan=await lanContext.newPage();lan.on('pageerror',error=>errors.push(error.message));
+  await lan.goto(origin.replace('127.0.0.1','casinha-demo.test'));
+  assert.equal(await lan.evaluate(()=>window.isSecureContext),false);
+  assert.equal(await lan.evaluate(()=>typeof crypto.randomUUID),'undefined');
+  await lan.getByRole('button',{name:'Nova comanda',exact:true}).click();
+  await lan.getByRole('button',{name:'Abrir comanda',exact:false}).click();
+  await lan.getByRole('button',{name:'Água para fluidificar',exact:true}).click();
+  await lan.getByRole('button',{name:'Fechar comanda',exact:true}).click();
+  await lan.getByRole('heading',{name:'Confira a comanda'}).waitFor();
+  assert.match(await lan.locator('#order-total').innerText(),/6,00/);
+  await lan.reload();await lan.getByRole('heading',{name:'Confira a comanda'}).waitFor();
+  assert.equal(await lan.locator('.review-row').count(),1);
+  assert.deepEqual(errors,[]);await lanContext.close();
   console.log('Browser OK: flow, same ISBN, correction, payment confirmation, real offline reload, search and mobile font enlargement.');
 } finally {
   await browser?.close();await new Promise(resolve=>server.close(resolve));await rm(dir,{recursive:true,force:true});

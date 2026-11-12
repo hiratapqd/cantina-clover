@@ -1,4 +1,4 @@
-import { validateOrder } from './domain.js';
+import { validateOrder, newId } from './domain.js';
 const request = req => new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
 const complete = tx => new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = () => reject(tx.error || new Error('A gravação foi interrompida.')); tx.onerror = () => {}; });
 export async function openStorage(name = 'casinha-azul-operacao-v1') {
@@ -14,7 +14,7 @@ export async function openStorage(name = 'casinha-azul-operacao-v1') {
   async function getMeta(key) { return (await request(db.transaction('meta').objectStore('meta').get(key)))?.value; }
   async function setMeta(key, value) { const tx = db.transaction('meta', 'readwrite'), done = complete(tx); tx.objectStore('meta').put({ key, value }); await done; }
   const init = db.transaction('meta', 'readwrite'), initDone = complete(init), meta = init.objectStore('meta');
-  if (!await request(meta.get('deviceId'))) meta.put({ key: 'deviceId', value: crypto.randomUUID() });
+  if (!await request(meta.get('deviceId'))) meta.put({ key: 'deviceId', value: newId() });
   await initDone;
   async function commit(id, expectedVersion, reducer, creating = false) {
     const tx = db.transaction(['orders', 'outbox', 'meta'], 'readwrite');
@@ -34,14 +34,14 @@ export async function openStorage(name = 'casinha-azul-operacao-v1') {
       const next = reducer(structuredClone(value));
       next.version = creating ? 0 : previous.version + 1;
       validateOrder(next);
-      const event = { id: crypto.randomUUID(), orderId: next.id, deviceId: next.deviceId, baseVersion: creating ? -1 : previous.version, occurredAt: new Date().toISOString(), order: next };
+      const event = { id: newId(), orderId: next.id, deviceId: next.deviceId, baseVersion: creating ? -1 : previous.version, occurredAt: new Date().toISOString(), order: next };
       orders.put(next); tx.objectStore('outbox').put(event);
       await done; return next;
     } catch (error) { try { tx.abort(); } catch {} await done.catch(() => {}); throw error; }
   }
   return {
     getMeta, setMeta,
-    async create(name = '') { const clean = String(name).trim(); if (clean.length > 80) throw new Error('Use até 80 caracteres no nome.'); return commit(crypto.randomUUID(), -1, order => ({ ...order, name: clean }), true); },
+    async create(name = '') { const clean = String(name).trim(); if (clean.length > 80) throw new Error('Use até 80 caracteres no nome.'); return commit(newId(), -1, order => ({ ...order, name: clean }), true); },
     update: (id, version, reducer) => commit(id, version, reducer),
     get: id => request(db.transaction('orders').objectStore('orders').get(id)),
     all: () => request(db.transaction('orders').objectStore('orders').getAll()),

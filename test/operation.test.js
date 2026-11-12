@@ -7,10 +7,33 @@ import path from 'node:path';
 import { openStorage } from '../public/storage.js';
 import { addItem, changeQuantity, payOrder, parseMoney } from '../public/domain.js';
 import { createSync } from '../public/sync.js';
-import { createServer, applyEvents } from '../server.js';
+import { createServer, applyEvents, getServerConfig } from '../server.js';
 
 const book = { id:'b:9786589699446:novo', kind:'books', name:'Livro de exemplo', isbn:'9786589699446', condition:'novo', priceCents:3000 };
 const setup = () => openStorage(`test-${crypto.randomUUID()}`);
+test('Render binds publicly, uses its PORT and requires a configured persistent directory for sync',()=>{
+  const local=getServerConfig({});assert.equal(local.port,3001);assert.equal(local.host,'0.0.0.0');assert.equal(local.syncEnabled,true);
+  assert.equal(getServerConfig({HOST:'127.0.0.1'}).host,'127.0.0.1');
+  const render=getServerConfig({RENDER:'true',PORT:'12345'});
+  assert.equal(render.port,12345);assert.equal(render.host,'0.0.0.0');assert.equal(render.syncEnabled,false);assert.equal(render.adminUrl,null);
+  const disk=getServerConfig({NODE_ENV:'production',DEMO_DATA_DIR:'.data',ADMIN_URL:'https://admin.example.com'});
+  assert.equal(disk.syncEnabled,true);assert.equal(disk.adminUrl,'https://admin.example.com/');
+  assert.equal(getServerConfig({NODE_ENV:'production',PORT:'3000'}).port,3000);
+  for(const port of ['3000','abc','-1','65536','1.5'])assert.throws(()=>getServerConfig({PORT:port}));
+  assert.throws(()=>getServerConfig({ADMIN_URL:'javascript:alert(1)'}));
+});
+test('cloud without persistent disk preserves the local outbox and exposes only public configuration',async()=>{
+  const server=createServer({syncEnabled:false,adminUrl:null});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const base=`http://127.0.0.1:${server.address().port}`,db=await setup();
+  try {
+    await db.create();
+    const config=await(await fetch(base+'/api/config')).json();assert.deepEqual(config,{adminUrl:null,syncEnabled:false});
+    assert.equal((await fetch(base+'/health')).status,200);
+    const sync=createSync(db,()=>{},(url,options)=>fetch(base+url,options),()=>true);
+    await sync.run();assert.equal((await db.pending()).length,1);assert.equal((await sync.state()).status,'pending');
+    assert.match((await sync.state()).error,/disco persistente/);
+  }finally{db.close();await new Promise(resolve=>server.close(resolve));}
+});
 test('money uses integer cents and rejects ambiguous or invalid input',()=>{
   assert.equal(parseMoney('12,50'),1250);assert.equal(parseMoney('0.10'),10);
   for(const input of ['0','-10','1.234','abc',''])assert.throws(()=>parseMoney(input));
