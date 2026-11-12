@@ -1,0 +1,21 @@
+/* Palette from https://grupocasinhaazul.com.br/ (consulted 2026-11-12).
+   Light blues decorate surfaces; action labels use blue/white for contrast. */
+:root {
+  --blue: #0b6bbf;
+  --blue-hover: #045cb4;
+  --blue-medium: #5a9fdc;
+  --blue-light: #6ec1e4;
+  --blue-pale: #dff0f4;
+  --canvas: #f0f5fa;
+  --white: #ffffff;
+  --ink: #1e293b;
+  --muted: #334155;
+  --border: #d1d5db;
+  --focus: #045cb4;
+  --success-accent: #61ce70;
+  --success-ink: #216746;
+  --success-surface: #e7f4ec;
+  --warm: #fbe8dd;
+  --warning-ink: #6b3800;
+  --warm-border: #c28c68;
+}

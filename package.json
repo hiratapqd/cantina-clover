@@ -1,0 +1,21 @@
+{
+  "name": "casinha-azul-operacao",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Demonstração web da operação da cantina Casinha Azul",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test --test-isolation=none",
+    "test:browser": "node scripts/browser-check.mjs",
+    "check": "node --check server.js && node --check public/app.js && node --check public/domain.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "fake-indexeddb": "^6.2.8"
+  }
+}
